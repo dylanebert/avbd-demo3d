@@ -316,6 +316,65 @@ static void sceneBreakable(Solver *solver)
         new Rigid(solver, {2, 1, 1}, 1.0f, 0.5f, {0, 0, i * 2.0f + 8.0f});
 }
 
+static void sceneSoftJoint(Solver *solver)
+{
+    solver->clear();
+    new Rigid(solver, {100, 100, 1}, 0.0f, 0.5f, {0, 0, 0});
+    Rigid *a = new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {0, 0, 4});
+    Rigid *b = new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {1, 0, 4});
+    new Joint(solver, a, b, {0.5f, 0, 0}, {-0.5f, 0, 0}, 1000.0f, 250.0f);
+}
+
+static void sceneTwoBoxes(Solver *solver)
+{
+    solver->clear();
+    new Rigid(solver, {100, 100, 1}, 0.0f, 0.5f, {0, 0, 0});
+    new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {0, 0, 4});
+    new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {3, 0, 4});
+}
+
+static void sceneRigidJoint(Solver *solver)
+{
+    solver->clear();
+    new Rigid(solver, {100, 100, 1}, 0.0f, 0.5f, {0, 0, 0});
+    Rigid *a = new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {0, 0, 4});
+    Rigid *b = new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {1, 0, 4});
+    new Joint(solver, a, b, {0.5f, 0, 0}, {-0.5f, 0, 0});
+}
+
+static void sceneSoftJointFree(Solver *solver)
+{
+    solver->clear();
+    Rigid *a = new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {0, 0, 4});
+    Rigid *b = new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {1, 0, 4});
+    new Joint(solver, a, b, {0.5f, 0, 0}, {-0.5f, 0, 0}, 1000.0f, 250.0f);
+}
+
+static void sceneBridgeMini(Solver *solver)
+{
+    const int N = 5;
+    const float plankLength = 1.0f;
+    const float plankWidth = 4.0f;
+    const float plankHeight = 0.5f;
+    const float halfLength = plankLength * 0.5f;
+    const float halfWidth = plankWidth * 0.5f;
+
+    solver->clear();
+    new Rigid(solver, {100, 100, 1}, 0.0f, 0.5f, {0, 0, 0});
+
+    Rigid *prev = 0;
+    for (int i = 0; i < N; i++)
+    {
+        Rigid *curr = new Rigid(solver, {plankLength, plankWidth, plankHeight}, i == 0 || i == N - 1 ? 0.0f : 1.0f, 0.5f, {(float)i - N / 2.0f, 0.0f, 10.0f});
+        if (prev)
+        {
+            new Joint(solver, prev, curr, {halfLength, halfWidth, 0}, {-halfLength, halfWidth, 0}, INFINITY, 0.0f);
+            new Joint(solver, prev, curr, {halfLength, -halfWidth, 0}, {-halfLength, -halfWidth, 0}, INFINITY, 0.0f);
+        }
+        prev = curr;
+    }
+}
+
 static void (*scenes[])(Solver *) = {
     sceneEmpty,
     sceneGround,
