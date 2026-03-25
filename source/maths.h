@@ -467,9 +467,9 @@ inline float3x3 rotation(quat q)
 
 inline float3x3 orthonormal(float3 normal)
 {
-    float3 t1 = fabsf(normal.x) > fabsf(normal.z) ? float3{-normal.y, normal.x, 0} : float3{0, -normal.z, normal.y};
+    float3 t1 = fabsf(normal.x) > fabsf(normal.y) ? float3{-normal.z, 0, normal.x} : float3{0, normal.z, -normal.y};
     t1 = normalize(t1);
-    float3 t2 = cross(normal, t1);
+    float3 t2 = cross(t1, normal);
     return float3x3{normal, t1, t2};
 }
 

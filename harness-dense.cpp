@@ -51,11 +51,6 @@ static Rigid **bodyArray(Solver *s, int n) {
     return arr;
 }
 
-// Z-up to Y-up conversion
-// pos: (x, y, z) -> (x, z, y)
-// quat: (x, y, z, w) -> (-x, -z, -y, w)
-// vel/size: same as pos
-
 static void writeFloat(FILE *f, float v) {
     fprintf(f, "%.17g", v);
 }
@@ -90,13 +85,10 @@ int main(int argc, char **argv) {
             if (i) fprintf(f, ",");
             Rigid *b = bodies[i];
             fprintf(f, "{\"mass\":%.17g,\"friction\":%.17g,", b->mass, b->friction);
-            // size: Z-up (sx, sy, sz) -> Y-up (sx, sz, sy)
-            fprintf(f, "\"size\":[%.17g,%.17g,%.17g],", b->size.x, b->size.z, b->size.y);
-            // initialPos: Z-up (x, y, z) -> Y-up (x, z, y)
-            fprintf(f, "\"initialPos\":[%.17g,%.17g,%.17g],", b->positionLin.x, b->positionLin.z, b->positionLin.y);
-            // initialQuat: Z-up (x, y, z, w) -> Y-up (-x, -z, -y, w)
+            fprintf(f, "\"size\":[%.17g,%.17g,%.17g],", b->size.x, b->size.y, b->size.z);
+            fprintf(f, "\"initialPos\":[%.17g,%.17g,%.17g],", b->positionLin.x, b->positionLin.y, b->positionLin.z);
             fprintf(f, "\"initialQuat\":[%.17g,%.17g,%.17g,%.17g]}",
-                -b->positionAng.x, -b->positionAng.z, -b->positionAng.y, b->positionAng.w);
+                b->positionAng.x, b->positionAng.y, b->positionAng.z, b->positionAng.w);
         }
         fprintf(f, "],");
 
@@ -108,44 +100,40 @@ int main(int argc, char **argv) {
             if (frame > 1) fprintf(f, ",");
             fprintf(f, "{\"frame\":%d,", frame);
 
-            // pos (Y-up)
             fprintf(f, "\"pos\":[");
             for (int i = 0; i < n; i++) {
                 if (i) fprintf(f, ",");
                 writeFloat(f, bodies[i]->positionLin.x); fprintf(f, ",");
-                writeFloat(f, bodies[i]->positionLin.z); fprintf(f, ",");
-                writeFloat(f, bodies[i]->positionLin.y);
+                writeFloat(f, bodies[i]->positionLin.y); fprintf(f, ",");
+                writeFloat(f, bodies[i]->positionLin.z);
             }
             fprintf(f, "],");
 
-            // quat (Y-up)
             fprintf(f, "\"quat\":[");
             for (int i = 0; i < n; i++) {
                 if (i) fprintf(f, ",");
-                writeFloat(f, -bodies[i]->positionAng.x); fprintf(f, ",");
-                writeFloat(f, -bodies[i]->positionAng.z); fprintf(f, ",");
-                writeFloat(f, -bodies[i]->positionAng.y); fprintf(f, ",");
+                writeFloat(f, bodies[i]->positionAng.x); fprintf(f, ",");
+                writeFloat(f, bodies[i]->positionAng.y); fprintf(f, ",");
+                writeFloat(f, bodies[i]->positionAng.z); fprintf(f, ",");
                 writeFloat(f, bodies[i]->positionAng.w);
             }
             fprintf(f, "],");
 
-            // vel (Y-up)
             fprintf(f, "\"vel\":[");
             for (int i = 0; i < n; i++) {
                 if (i) fprintf(f, ",");
                 writeFloat(f, bodies[i]->velocityLin.x); fprintf(f, ",");
-                writeFloat(f, bodies[i]->velocityLin.z); fprintf(f, ",");
-                writeFloat(f, bodies[i]->velocityLin.y);
+                writeFloat(f, bodies[i]->velocityLin.y); fprintf(f, ",");
+                writeFloat(f, bodies[i]->velocityLin.z);
             }
             fprintf(f, "],");
 
-            // angVel (Y-up)
             fprintf(f, "\"angVel\":[");
             for (int i = 0; i < n; i++) {
                 if (i) fprintf(f, ",");
-                writeFloat(f, -bodies[i]->velocityAng.x); fprintf(f, ",");
-                writeFloat(f, -bodies[i]->velocityAng.z); fprintf(f, ",");
-                writeFloat(f, -bodies[i]->velocityAng.y);
+                writeFloat(f, bodies[i]->velocityAng.x); fprintf(f, ",");
+                writeFloat(f, bodies[i]->velocityAng.y); fprintf(f, ",");
+                writeFloat(f, bodies[i]->velocityAng.z);
             }
             fprintf(f, "]}");
         }

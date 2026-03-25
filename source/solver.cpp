@@ -167,12 +167,12 @@ void Solver::step()
         // Compute inertial position (Eq 2)
         body->inertialLin = body->positionLin + body->velocityLin * dt;
         if (body->mass > 0)
-            body->inertialLin += float3{0, 0, gravity} * (dt * dt);
+            body->inertialLin += float3{0, gravity, 0} * (dt * dt);
         body->inertialAng = body->positionAng + body->velocityAng * dt;
 
         // Adaptive warmstart (See original VBD paper)
         float3 accel = (body->velocityLin - body->prevVelocityLin) / dt;
-        float accelExt = accel.z * sign(gravity);
+        float accelExt = accel.y * sign(gravity);
         float accelWeight = clamp(accelExt / abs(gravity), 0.0f, 1.0f);
         if (!isfinite(accelWeight))
             accelWeight = 0.0f;
@@ -182,7 +182,7 @@ void Solver::step()
         body->initialAng = body->positionAng;
         if (body->mass > 0)
         {
-            body->positionLin = body->positionLin + body->velocityLin * dt + float3{0, 0, gravity} * (accelWeight * dt * dt);
+            body->positionLin = body->positionLin + body->velocityLin * dt + float3{0, gravity, 0} * (accelWeight * dt * dt);
             body->positionAng = body->positionAng + body->velocityAng * dt;
         }
     }
