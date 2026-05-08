@@ -66,6 +66,10 @@ int main(int argc, char **argv) {
         auto &sc = denseScenes[si];
         sc.fn(&solver);
 
+        // Pin to shallot prod params (see packages/shallot/src/standard/physics/index.ts DEFAULT_PARAMS).
+        solver.iterations = 4;
+        solver.betaLin = 100000.0f;
+
         int n = countBodies(&solver);
         Rigid **bodies = bodyArray(&solver, n);
 
