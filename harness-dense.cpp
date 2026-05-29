@@ -58,6 +58,10 @@ static void writeFloat(FILE *f, float v) {
 int main(int argc, char **argv) {
     int frames = argc > 1 ? atoi(argv[1]) : 600;
     const char *outDir = argc > 2 ? argv[2] : ".";
+    // Optional param-set overrides; absent => the reference solver defaults
+    // (10 iters, betaLin 1e4, alpha 0.99) = the canonical AVBD set.
+    int iterations = argc > 3 ? atoi(argv[3]) : -1;
+    float betaLin = argc > 4 ? (float)atof(argv[4]) : -1.0f;
 
     Solver solver;
     int nScenes = sizeof(denseScenes) / sizeof(denseScenes[0]);
@@ -66,9 +70,8 @@ int main(int argc, char **argv) {
         auto &sc = denseScenes[si];
         sc.fn(&solver);
 
-        // Pin to shallot prod params (see packages/shallot/src/standard/physics/index.ts DEFAULT_PARAMS).
-        solver.iterations = 4;
-        solver.betaLin = 100000.0f;
+        if (iterations > 0) solver.iterations = iterations;
+        if (betaLin > 0.0f) solver.betaLin = betaLin;
 
         int n = countBodies(&solver);
         Rigid **bodies = bodyArray(&solver, n);
