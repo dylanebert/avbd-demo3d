@@ -94,8 +94,9 @@ int main(int argc, char **argv) {
             fprintf(f, "{\"mass\":%.17g,\"friction\":%.17g,", b->mass, b->friction);
             fprintf(f, "\"size\":[%.17g,%.17g,%.17g],", b->size.x, b->size.y, b->size.z);
             fprintf(f, "\"initialPos\":[%.17g,%.17g,%.17g],", b->positionLin.x, b->positionLin.y, b->positionLin.z);
-            fprintf(f, "\"initialQuat\":[%.17g,%.17g,%.17g,%.17g]}",
+            fprintf(f, "\"initialQuat\":[%.17g,%.17g,%.17g,%.17g],",
                 b->positionAng.x, b->positionAng.y, b->positionAng.z, b->positionAng.w);
+            fprintf(f, "\"initialVel\":[%.17g,%.17g,%.17g]}", b->velocityLin.x, b->velocityLin.y, b->velocityLin.z);
         }
         fprintf(f, "],");
 
