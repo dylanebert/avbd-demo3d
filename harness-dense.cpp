@@ -13,6 +13,51 @@
 
 struct SceneEntry { const char *name; void (*fn)(Solver *); };
 
+// Harness-only parity scenes — the rotation / tipping / settling-friction dynamics the demo's own box
+// scenes never exercise (ground/stack/stack-ratio/pyramid/two-boxes are all axis-aligned, ~zero angular
+// velocity). corner-rest + leaning are bit-identical to the TS corpus (tests/avbd/corpus.ts cornerRest()
+// / leaning()), so the gold dump backs those corpus topologies. friction-settle is a bounded slide-to-rest:
+// the demo's dynamic/static-friction boxes slide off the 100-wide ground and free-fall (never settle), so
+// they can't verify friction *stops* a box — these decelerate to rest within the ground, lower μ farther.
+
+// a unit box tilted 45° about x then z, dropped — lands on a vertex, tips vertex->edge->face to rest flat.
+static void sceneCornerRest(Solver *solver)
+{
+    solver->clear();
+    new Rigid(solver, {40, 1, 40}, 0.0f, 0.6f, {0, 0, 0});
+    float a = rad(45.0f);
+    quat qx = {sinf(a * 0.5f), 0, 0, cosf(a * 0.5f)};
+    quat qz = {0, 0, sinf(a * 0.5f), cosf(a * 0.5f)};
+    Rigid *b = new Rigid(solver, {1, 1, 1}, 1.0f, 0.6f, {0, 2.5f, 0});
+    b->positionAng = qz * qx;
+}
+
+// a 5-box stack each offset 0.4 in +x — the cumulative lean puts the upper COM past the base, so it
+// topples, scatters, and settles. The chaotic stress: a topple must dissipate, never inject energy.
+static void sceneLeaning(Solver *solver)
+{
+    solver->clear();
+    new Rigid(solver, {40, 1, 40}, 0.0f, 0.5f, {0, 0, 0});
+    for (int i = 0; i < 5; i++)
+        new Rigid(solver, {1, 1, 1}, 1.0f, 0.5f, {i * 0.4f, 1.0f + i, 0});
+}
+
+// four boxes resting on the ground, launched in +x at 5 m/s; Coulomb friction brings each to rest inside
+// the ground bounds. Lower μ slides farther (d = v0^2/(2 μ g)) — the friction signature. Each in its own
+// z-lane so they slide independently (no box-box contact muddying the per-μ stop distance). μ < 1 so a box
+// slides rather than tipping (the sliding normal-force shift stays inside the base).
+static void sceneFrictionSettle(Solver *solver)
+{
+    solver->clear();
+    new Rigid(solver, {40, 1, 40}, 0.0f, 0.5f, {0, 0, 0});
+    const float v0 = 5.0f;
+    for (int i = 0; i < 4; i++)
+    {
+        float mu = 0.2f + i * 0.2f; // 0.2, 0.4, 0.6, 0.8
+        new Rigid(solver, {1, 1, 1}, 1.0f, mu, {-6.0f, 1.0f, -3.0f + i * 2.0f}, {v0, 0, 0});
+    }
+}
+
 static SceneEntry denseScenes[] = {
     {"ground", sceneGround},
     {"stack", sceneStack},
@@ -32,6 +77,9 @@ static SceneEntry denseScenes[] = {
     {"rigid-joint", sceneRigidJoint},
     {"soft-joint-free", sceneSoftJointFree},
     {"bridge-mini", sceneBridgeMini},
+    {"corner-rest", sceneCornerRest},
+    {"leaning", sceneLeaning},
+    {"friction-settle", sceneFrictionSettle},
 };
 
 static int countBodies(Solver *s) {
