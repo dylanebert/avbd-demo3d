@@ -334,6 +334,63 @@ inline void closestPointsOnSegments(const float3& p0, const float3& p1, const fl
     c1 = q0 + d2 * t;
 }
 
+// Reduce a > 4 candidate contact set to a <=4-point spread set — a verbatim port of Jolt's
+// PruneContactPoints (reference/jolt ManifoldBetweenTwoFaces.cpp, the Gregorius GDC-2015 recipe;
+// reference/bullet3 b3ContactCache corroborates). Project each A-anchor onto the contact plane
+// (perp `axis`, relative to `comA`), keep the point maximizing (planar dist)^2 * depth^2, its
+// farthest plane-partner, then the furthest candidate on EACH side of that line (max quad area).
+// Mirrors tests/avbd/collide.ts reduceManifold; gold-gated against reduce-gold.cpp (reduce.test.ts).
+// Returns the kept count; writes the kept indices to `out` (polygon order, 2-4 of them).
+inline int reduceManifoldContacts(const float3* xA, const float3* xB, int n, const float3& axis, const float3& comA, int* out)
+{
+    constexpr float cMinDistanceSq = 1.0e-6f;
+    float3 projected[MAX_CONTACTS];
+    float depthSq[MAX_CONTACTS];
+    for (int i = 0; i < n; ++i)
+    {
+        float3 v1 = xA[i] - comA;
+        projected[i] = v1 - axis * dot(v1, axis);
+        depthSq[i] = fmaxf(cMinDistanceSq, lengthSq(xB[i] - xA[i]));
+    }
+
+    int p1 = 0;
+    float val = fmaxf(cMinDistanceSq, lengthSq(projected[0])) * depthSq[0];
+    for (int i = 0; i < n; ++i)
+    {
+        float v = fmaxf(cMinDistanceSq, lengthSq(projected[i])) * depthSq[i];
+        if (v > val) { val = v; p1 = i; }
+    }
+    float3 p1v = projected[p1];
+
+    int p2 = -1;
+    val = -FLT_MAX;
+    for (int i = 0; i < n; ++i)
+        if (i != p1)
+        {
+            float v = fmaxf(cMinDistanceSq, lengthSq(projected[i] - p1v)) * depthSq[i];
+            if (v > val) { val = v; p2 = i; }
+        }
+    float3 p2v = projected[p2];
+
+    int p3 = -1, p4 = -1;
+    float minV = 0.0f, maxV = 0.0f;
+    float3 perp = cross(p2v - p1v, axis);
+    for (int i = 0; i < n; ++i)
+        if (i != p1 && i != p2)
+        {
+            float v = dot(perp, projected[i] - p1v);
+            if (v < minV) { minV = v; p3 = i; }
+            else if (v > maxV) { maxV = v; p4 = i; }
+        }
+
+    int c = 0;
+    out[c++] = p1;
+    if (p3 != -1) out[c++] = p3;
+    out[c++] = p2;
+    if (p4 != -1) out[c++] = p4;
+    return c;
+}
+
 inline int buildFaceManifold(Rigid* bodyA, Rigid* bodyB, const OBB& boxA, const OBB& boxB, bool referenceIsA, int referenceAxis, const float3& normalAB, Manifold::Contact* contacts)
 {
     const OBB& referenceBox = referenceIsA ? boxA : boxB;
@@ -380,7 +437,13 @@ inline int buildFaceManifold(Rigid* bodyA, Rigid* bodyB, const OBB& boxA, const 
     featurePrefix |= (referenceAxis & 0xFF) << 16;
     featurePrefix |= (incidentAxis & 0xFF) << 8;
 
-    for (int i = 0; i < count && contactCount < MAX_CONTACTS; ++i)
+    // build the clipped candidates (up to MAX_CONTACTS), dedup by midpoint
+    float3 candXA[MAX_CONTACTS];
+    float3 candXB[MAX_CONTACTS];
+    float3 candMid[MAX_CONTACTS];
+    int candFeat[MAX_CONTACTS];
+    int candCount = 0;
+    for (int i = 0; i < count && candCount < MAX_CONTACTS; ++i)
     {
         float3 pIncident = clip0[i];
         float distance = dot(pIncident - referenceFace.center, referenceFace.normal);
@@ -390,16 +453,40 @@ inline int buildFaceManifold(Rigid* bodyA, Rigid* bodyB, const OBB& boxA, const 
         float3 pReference = pIncident - referenceFace.normal * distance;
         float3 xA = referenceIsA ? pReference : pIncident;
         float3 xB = referenceIsA ? pIncident : pReference;
+        float3 mid = (xA + xB) * 0.5f;
 
-        addContact(bodyA, bodyB, contacts, contactCount, contactMidpoints, xA, xB, featurePrefix | (i & 0xFF));
+        bool dup = false;
+        for (int k = 0; k < candCount; ++k)
+            if (lengthSq(mid - candMid[k]) < CONTACT_MERGE_DIST_SQ) { dup = true; break; }
+        if (dup)
+            continue;
+
+        candXA[candCount] = xA;
+        candXB[candCount] = xB;
+        candMid[candCount] = mid;
+        candFeat[candCount] = featurePrefix | (i & 0xFF);
+        ++candCount;
     }
 
-    if (!contactCount)
+    if (!candCount)
     {
         float3 xA = supportPoint(boxA, normalAB);
         float3 xB = supportPoint(boxB, -normalAB);
         addContact(bodyA, bodyB, contacts, contactCount, contactMidpoints, xA, xB, featurePrefix);
+        return contactCount;
     }
+
+    // reduce to the spread set (Jolt) when the clip over-produced; each kept contact keeps its
+    // original clip-ordinal feature key (stable, scan-matched — we do NOT re-ordinal to storage rank;
+    // see the oracle header in tests/avbd/collide.ts for why that would false-match warmstart).
+    int sel[MAX_CONTACTS];
+    int selCount = candCount;
+    for (int i = 0; i < candCount; ++i) sel[i] = i;
+    if (candCount > 4)
+        selCount = reduceManifoldContacts(candXA, candXB, candCount, normalAB, bodyA->positionLin, sel);
+
+    for (int i = 0; i < selCount; ++i)
+        addContact(bodyA, bodyB, contacts, contactCount, contactMidpoints, candXA[sel[i]], candXB[sel[i]], candFeat[sel[i]]);
 
     return contactCount;
 }

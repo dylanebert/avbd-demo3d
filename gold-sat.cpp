@@ -63,6 +63,8 @@ int main() {
 
         Manifold::Contact contacts[8] = {0};
         float3x3 basis{};
+        // Manifold::collide applies the Phase-4.8.1 reduction + sort + re-ordinal internally
+        // (collide.cpp), so the emitted feature keys are already canonical.
         int n = Manifold::collide(a, b, contacts, basis);
 
         if (!first) printf(",");
