@@ -141,8 +141,10 @@ void Solver::step()
         {
             float3 dp = bodyA->positionLin - bodyB->positionLin;
             // The speculative band pads the broadphase so a pair within it is found before contact and its
-            // manifold survives a momentary separation (Phase 4.8.3, mirrored in the oracle + GPU step).
-            float r = bodyA->radius + bodyB->radius + SPECULATIVE_DISTANCE;
+            // manifold survives a momentary separation (Phase 4.8.3); the velocity-sweep term |vRel|*dt
+            // (Phase 4.8.4) extends the pad so a fast approaching pair is found while still separated by the
+            // sweep. Mirrored in the oracle + GPU step (GPU == oracle == C++).
+            float r = bodyA->radius + bodyB->radius + SPECULATIVE_DISTANCE + length(bodyA->velocityLin - bodyB->velocityLin) * dt;
             if (dot(dp, dp) <= r * r && !bodyA->constrainedTo(bodyB))
                 new Manifold(this, bodyA, bodyB);
         }

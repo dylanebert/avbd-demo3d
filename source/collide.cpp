@@ -221,7 +221,7 @@ inline bool addContact(Rigid* bodyA, Rigid* bodyB, Manifold::Contact* contacts, 
     return true;
 }
 
-inline bool testAxis(const OBB& boxA, const OBB& boxB, const float3& delta, const float3& axis, AxisType type, int indexA, int indexB, SatAxis& best)
+inline bool testAxis(const OBB& boxA, const OBB& boxB, const float3& delta, const float3& axis, AxisType type, int indexA, int indexB, SatAxis& best, const float3& dRel)
 {
     float lenSq = lengthSq(axis);
     if (lenSq < SAT_AXIS_EPSILON)
@@ -248,7 +248,11 @@ inline bool testAxis(const OBB& boxA, const OBB& boxB, const float3& delta, cons
     // A separating axis aborts the SAT only past the speculative band; within it the axis of maximum
     // separation is kept and a speculative manifold built off it, so a body within the band lands at
     // contact rather than tunnelling through it (Phase 4.8.3, mirrored in tests/avbd/collide.ts + the GPU).
-    if (separation > SPECULATIVE_DISTANCE)
+    // Phase 4.8.4 (velocity sweep): the band along n is the LARGER of the static skin and the closing
+    // displacement this step, max(SPECULATIVE_DISTANCE, max(0, dot(dRel, n))) (dRel = (vA-vB)*dt), so a
+    // fast mover crossing the contact this step is caught at frame start. `max` (not `+`) keeps a slow
+    // body's band velocity-INDEPENDENT (no settling feedback). closing 0 recovers 4.8.3.
+    if (separation > fmaxf(SPECULATIVE_DISTANCE, fmaxf(0.0f, dot(dRel, n))))
         return false;
 
     if (!best.valid || separation > best.separation)
@@ -394,7 +398,7 @@ inline int reduceManifoldContacts(const float3* xA, const float3* xB, int n, con
     return c;
 }
 
-inline int buildFaceManifold(Rigid* bodyA, Rigid* bodyB, const OBB& boxA, const OBB& boxB, bool referenceIsA, int referenceAxis, const float3& normalAB, Manifold::Contact* contacts)
+inline int buildFaceManifold(Rigid* bodyA, Rigid* bodyB, const OBB& boxA, const OBB& boxB, bool referenceIsA, int referenceAxis, const float3& normalAB, float band, Manifold::Contact* contacts)
 {
     const OBB& referenceBox = referenceIsA ? boxA : boxB;
     const OBB& incidentBox = referenceIsA ? boxB : boxA;
@@ -450,10 +454,11 @@ inline int buildFaceManifold(Rigid* bodyA, Rigid* bodyB, const OBB& boxA, const 
     {
         float3 pIncident = clip0[i];
         float distance = dot(pIncident - referenceFace.center, referenceFace.normal);
-        // A clip vertex up to the speculative band beyond the reference face is kept: its projection onto
-        // the face plane carries the +gap into C0, generating a separated contact early (Phase 4.8.3). A
+        // A clip vertex up to the (swept) band beyond the reference face is kept: its projection onto the
+        // face plane carries the +gap into C0, generating a separated contact early (Phase 4.8.3). The band
+        // is max(SPECULATIVE_DISTANCE, closing displacement along the contact normal) (Phase 4.8.4); a
         // penetrating vertex (distance <= 0) is always kept, so a settled pile's manifold is unchanged.
-        if (distance > SPECULATIVE_DISTANCE)
+        if (distance > band)
             continue;
 
         float3 pReference = pIncident - referenceFace.normal * distance;
@@ -533,6 +538,12 @@ int Manifold::collide(Rigid* bodyA, Rigid* bodyB, Contact* contacts, float3x3& b
     OBB boxB = makeOBB(bodyB);
     float3 delta = boxB.center - boxA.center;
 
+    // the velocity sweep (Phase 4.8.4): the relative displacement over the step widens the per-axis SAT
+    // band so a fast pair crossing the contact this frame is caught at frame start. velocityLin is last
+    // step's recovered velocity (collide runs before the inertial reposition), mirroring the oracle + GPU.
+    float dt = bodyA->solver->dt;
+    float3 dRel = (bodyA->velocityLin - bodyB->velocityLin) * dt;
+
     SatAxis bestFace{};
     bestFace.separation = -FLT_MAX;
     bestFace.valid = false;
@@ -543,13 +554,13 @@ int Manifold::collide(Rigid* bodyA, Rigid* bodyB, Contact* contacts, float3x3& b
 
     for (int i = 0; i < 3; ++i)
     {
-        if (!testAxis(boxA, boxB, delta, boxA.axis[i], AXIS_FACE_A, i, -1, bestFace))
+        if (!testAxis(boxA, boxB, delta, boxA.axis[i], AXIS_FACE_A, i, -1, bestFace, dRel))
             return 0;
     }
 
     for (int i = 0; i < 3; ++i)
     {
-        if (!testAxis(boxA, boxB, delta, boxB.axis[i], AXIS_FACE_B, -1, i, bestFace))
+        if (!testAxis(boxA, boxB, delta, boxB.axis[i], AXIS_FACE_B, -1, i, bestFace, dRel))
             return 0;
     }
 
@@ -558,7 +569,7 @@ int Manifold::collide(Rigid* bodyA, Rigid* bodyB, Contact* contacts, float3x3& b
         for (int j = 0; j < 3; ++j)
         {
             float3 axis = cross(boxA.axis[i], boxB.axis[j]);
-            if (!testAxis(boxA, boxB, delta, axis, AXIS_EDGE, i, j, bestEdge))
+            if (!testAxis(boxA, boxB, delta, axis, AXIS_EDGE, i, j, bestEdge, dRel))
                 return 0;
         }
     }
@@ -577,11 +588,15 @@ int Manifold::collide(Rigid* bodyA, Rigid* bodyB, Contact* contacts, float3x3& b
 
     basisOut = orthonormal(-best.normalAB);
 
+    // the swept clip band along the contact axis — the same max(SPECULATIVE_DISTANCE, closing) form as the
+    // testAxis abort, for the winning normal. A max(0, ...) magnitude, reference-orientation safe.
+    float band = fmaxf(SPECULATIVE_DISTANCE, fmaxf(0.0f, dot(dRel, best.normalAB)));
+
     if (best.type == AXIS_EDGE)
         return buildEdgeContact(bodyA, bodyB, boxA, boxB, best.indexA, best.indexB, best.normalAB, contacts);
 
     if (best.type == AXIS_FACE_A)
-        return buildFaceManifold(bodyA, bodyB, boxA, boxB, true, best.indexA, best.normalAB, contacts);
+        return buildFaceManifold(bodyA, bodyB, boxA, boxB, true, best.indexA, best.normalAB, band, contacts);
 
-    return buildFaceManifold(bodyA, bodyB, boxA, boxB, false, best.indexB, best.normalAB, contacts);
+    return buildFaceManifold(bodyA, bodyB, boxA, boxB, false, best.indexB, best.normalAB, band, contacts);
 }

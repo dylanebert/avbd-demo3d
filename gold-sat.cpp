@@ -15,6 +15,8 @@ struct Cfg {
     const char *name;
     float3 sizeA; float3 posA; quat quatA;
     float3 sizeB; float3 posB; quat quatB;
+    // initial velocities (Phase 4.8.4 velocity sweep); absent in a config => {0,0,0} (the static SAT)
+    float3 velA; float3 velB;
 };
 
 // rotation `deg` degrees about a unit axis
@@ -56,6 +58,12 @@ int main() {
         //    0.04 band — the boundary proving the speculative cutoff is exact (not all-pairs). ──
         {"sep-far",          {1,1,1},{0,0,0},ID,           {1,1,1},{5,0,0},ID},
         {"sep-gap",          {1,1,1},{0,0,0},ID,           {1,1,1},{1.05f,0,0},ID},
+        // ── swept (Phase 4.8.4 velocity sweep): a box approaching a face from a gap BEYOND the static band,
+        //    closing fast enough that the swept band max(SPECULATIVE_DISTANCE, |closing|) catches it at frame
+        //    start. The static band alone (0.04) misses these (the gap ≫ 0.04) → 0 contacts → tunnel; the
+        //    velocity term generates the swept face manifold carrying the +gap in C0. dRel = (velA−velB)·dt. ──
+        {"spec-swept-face",   {1,1,1},{0,0,0},ID,          {1,1,1},{0,1.3f,0},ID,   {0,0,0},{0,-60,0}},
+        {"spec-swept-ground", {10,1,10},{0,0,0},ID,        {1,1,1},{0,1.5f,0},ID,   {0,0,0},{0,-100,0}},
     };
 
     Solver solver;
@@ -63,9 +71,9 @@ int main() {
     bool first = true;
     for (auto &c : cfgs) {
         solver.clear();
-        Rigid *a = new Rigid(&solver, c.sizeA, 1.0f, 0.5f, c.posA);
+        Rigid *a = new Rigid(&solver, c.sizeA, 1.0f, 0.5f, c.posA, c.velA);
         a->positionAng = c.quatA;
-        Rigid *b = new Rigid(&solver, c.sizeB, 1.0f, 0.5f, c.posB);
+        Rigid *b = new Rigid(&solver, c.sizeB, 1.0f, 0.5f, c.posB, c.velB);
         b->positionAng = c.quatB;
 
         Manifold::Contact contacts[8] = {0};
@@ -78,10 +86,10 @@ int main() {
         first = false;
 
         printf("{\"name\":\"%s\",", c.name);
-        printf("\"a\":{\"size\":[%.17g,%.17g,%.17g],\"pos\":[%.17g,%.17g,%.17g],\"quat\":[%.17g,%.17g,%.17g,%.17g]},",
-            c.sizeA.x, c.sizeA.y, c.sizeA.z, c.posA.x, c.posA.y, c.posA.z, c.quatA.x, c.quatA.y, c.quatA.z, c.quatA.w);
-        printf("\"b\":{\"size\":[%.17g,%.17g,%.17g],\"pos\":[%.17g,%.17g,%.17g],\"quat\":[%.17g,%.17g,%.17g,%.17g]},",
-            c.sizeB.x, c.sizeB.y, c.sizeB.z, c.posB.x, c.posB.y, c.posB.z, c.quatB.x, c.quatB.y, c.quatB.z, c.quatB.w);
+        printf("\"a\":{\"size\":[%.17g,%.17g,%.17g],\"pos\":[%.17g,%.17g,%.17g],\"quat\":[%.17g,%.17g,%.17g,%.17g],\"vel\":[%.17g,%.17g,%.17g]},",
+            c.sizeA.x, c.sizeA.y, c.sizeA.z, c.posA.x, c.posA.y, c.posA.z, c.quatA.x, c.quatA.y, c.quatA.z, c.quatA.w, c.velA.x, c.velA.y, c.velA.z);
+        printf("\"b\":{\"size\":[%.17g,%.17g,%.17g],\"pos\":[%.17g,%.17g,%.17g],\"quat\":[%.17g,%.17g,%.17g,%.17g],\"vel\":[%.17g,%.17g,%.17g]},",
+            c.sizeB.x, c.sizeB.y, c.sizeB.z, c.posB.x, c.posB.y, c.posB.z, c.quatB.x, c.quatB.y, c.quatB.z, c.quatB.w, c.velB.x, c.velB.y, c.velB.z);
         printf("\"numContacts\":%d,", n);
 
         printf("\"basis\":");
