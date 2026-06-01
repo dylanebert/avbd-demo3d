@@ -140,7 +140,9 @@ void Solver::step()
         for (Rigid *bodyB = bodyA->next; bodyB != 0; bodyB = bodyB->next)
         {
             float3 dp = bodyA->positionLin - bodyB->positionLin;
-            float r = bodyA->radius + bodyB->radius;
+            // The speculative band pads the broadphase so a pair within it is found before contact and its
+            // manifold survives a momentary separation (Phase 4.8.3, mirrored in the oracle + GPU step).
+            float r = bodyA->radius + bodyB->radius + SPECULATIVE_DISTANCE;
             if (dot(dp, dp) <= r * r && !bodyA->constrainedTo(bodyB))
                 new Manifold(this, bodyA, bodyB);
         }

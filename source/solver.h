@@ -28,6 +28,7 @@
 #define PENALTY_MIN 1.0f           // Minimum penalty parameter
 #define PENALTY_MAX 10000000000.0f // Maximum penalty parameter
 #define COLLISION_MARGIN 0.01f     // Margin for collision detection to avoid flickering contacts
+#define SPECULATIVE_DISTANCE (4.0f * COLLISION_MARGIN) // Speculative contact band (Phase 4.8.3): the SAT emits a contact while separated by up to this gap (Box2D's 4*slop), so a body within it lands at contact instead of tunnelling; the broadphase pads its sphere by the same distance
 #define STICK_THRESH 0.00001f      // Position threshold for sticking contacts (ie static friction)
 #define SHOW_CONTACTS true         // Whether to show contacts in the debug draw
 

@@ -46,7 +46,14 @@ int main() {
         {"face-b-diag",      {1,1,1},{0,1.15f,0},aa({0,0,1},45), {10,1,10},{0,0,0},ID},
         // ── edge-edge (rotated boxes whose edges cross; edge axis wins the SAT) ──
         {"edge-x-y-cross",   {1,4,1},{0,0,0},aa({1,0,0},45), {1,4,1},{0,0,0.9f},aa({0,0,1},45)},
-        // ── separated (no overlap → 0 contacts; basis undefined) ──
+        // ── speculative (separated within SPECULATIVE_DISTANCE=0.04 → a contact carrying the +gap; Phase 4.8.3) ──
+        // a face manifold across a 0.03 gap: the incident face's clip vertices project onto the reference
+        // face plane, so C0.x = +gap + COLLISION_MARGIN > 0 and the solver's repulsion-only constraint
+        // limits approach (no penetration pop). The dominant case (box about to land on a face).
+        {"spec-face-gap",    {1,1,1},{0,0,0},ID,           {1,1,1},{0,1.03f,0},ID},
+        {"spec-face-ground", {10,1,10},{0,0,0},ID,         {1,1,1},{0,1.03f,0},ID},
+        // ── separated (no overlap → 0 contacts; basis undefined). sep-gap at 0.05 sits JUST outside the
+        //    0.04 band — the boundary proving the speculative cutoff is exact (not all-pairs). ──
         {"sep-far",          {1,1,1},{0,0,0},ID,           {1,1,1},{5,0,0},ID},
         {"sep-gap",          {1,1,1},{0,0,0},ID,           {1,1,1},{1.05f,0,0},ID},
     };

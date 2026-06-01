@@ -245,7 +245,10 @@ inline bool testAxis(const OBB& boxA, const OBB& boxB, const float3& delta, cons
         boxB.half.z * absDot(n, boxB.axis[2]);
 
     float separation = distance - (rA + rB);
-    if (separation > 0.0f)
+    // A separating axis aborts the SAT only past the speculative band; within it the axis of maximum
+    // separation is kept and a speculative manifold built off it, so a body within the band lands at
+    // contact rather than tunnelling through it (Phase 4.8.3, mirrored in tests/avbd/collide.ts + the GPU).
+    if (separation > SPECULATIVE_DISTANCE)
         return false;
 
     if (!best.valid || separation > best.separation)
@@ -447,7 +450,10 @@ inline int buildFaceManifold(Rigid* bodyA, Rigid* bodyB, const OBB& boxA, const 
     {
         float3 pIncident = clip0[i];
         float distance = dot(pIncident - referenceFace.center, referenceFace.normal);
-        if (distance > PLANE_EPSILON)
+        // A clip vertex up to the speculative band beyond the reference face is kept: its projection onto
+        // the face plane carries the +gap into C0, generating a separated contact early (Phase 4.8.3). A
+        // penetrating vertex (distance <= 0) is always kept, so a settled pile's manifold is unchanged.
+        if (distance > SPECULATIVE_DISTANCE)
             continue;
 
         float3 pReference = pIncident - referenceFace.normal * distance;
