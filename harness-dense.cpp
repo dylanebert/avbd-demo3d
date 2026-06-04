@@ -172,9 +172,10 @@ int main(int argc, char **argv) {
         }
         fprintf(f, "],");
 
-        // Joints (authored constraints, body-index-referenced). bodyA may be null (joint to the world
-        // point rA) → index -1. INFINITY stiffness can't round-trip through JSON, so emit a 1e30 sentinel
-        // the loader maps back to Infinity (the rigid-joint stabilization branch keys on isinf).
+        // Joints (authored constraints, body-index-referenced). Spherical = stiffnessAng 0, fixed = ∞.
+        // INFINITY can't round-trip through JSON, so emit a 1e30 sentinel the loader maps back to Infinity
+        // (the rigid-joint stabilization branch keys on isinf). fracture + world-anchored joints are not
+        // modelled (non-standard AVBD: absent from the paper + webphysics) so they aren't dumped.
         auto writeStiffness = [&](float v) { writeFloat(f, std::isinf(v) ? 1e30f : v); };
         fprintf(f, "\"joints\":[");
         bool firstJoint = true;
@@ -183,15 +184,13 @@ int main(int argc, char **argv) {
             if (!jt) continue;
             if (!firstJoint) fprintf(f, ",");
             firstJoint = false;
-            fprintf(f, "{\"a\":%d,\"b\":%d,", jt->bodyA ? indexOf(jt->bodyA) : -1, indexOf(jt->bodyB));
+            fprintf(f, "{\"a\":%d,\"b\":%d,", indexOf(jt->bodyA), indexOf(jt->bodyB));
             fprintf(f, "\"rA\":[%.17g,%.17g,%.17g],", jt->rA.x, jt->rA.y, jt->rA.z);
             fprintf(f, "\"rB\":[%.17g,%.17g,%.17g],", jt->rB.x, jt->rB.y, jt->rB.z);
             fprintf(f, "\"stiffnessLin\":");
             writeStiffness(jt->stiffnessLin);
             fprintf(f, ",\"stiffnessAng\":");
             writeStiffness(jt->stiffnessAng);
-            fprintf(f, ",\"fracture\":");
-            writeStiffness(jt->fracture);
             fprintf(f, "}");
         }
         fprintf(f, "],");
