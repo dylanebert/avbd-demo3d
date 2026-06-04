@@ -345,6 +345,57 @@ static void sceneBridgeMini(Solver *solver)
     }
 }
 
+// Harness-only joint parity scenes (roadmap "Phase 6.2 — Joints"). The demo's own joint scenes
+// (rope/bridge/breakable) have a ground, dozens of bodies, and contacts, so they confound the joint
+// math with the contact solve. These three isolate it: contact-free (small boxes spaced so the
+// broadphase sphere never overlaps a non-adjacent link), bounded (anchored to a static body so f32
+// coordinate magnitude stays small over 600 frames), and non-chaotic (so the f64 oracle tracks the
+// f32 C++ whole-run). They exercise the spherical joint (3 linear rows, rotation free) and the fixed
+// joint (+ 3 angular rows) end to end.
+
+// A single physical pendulum: a static pivot + a bob whose COM hangs L = 3 to the side, pinned by a
+// spherical joint at the pivot. The bob swings from horizontal (rotation free) — the spherical joint's
+// position+angular Jacobian coupling makes it a pin. Contact-free (the bob COM never nears the pivot).
+static void scenePendulumJoint(Solver *solver)
+{
+    solver->clear();
+    Rigid *pivot = new Rigid(solver, {0.5f, 0.5f, 0.5f}, 0.0f, 0.5f, {0, 5, 0});
+    Rigid *bob = new Rigid(solver, {0.5f, 0.5f, 0.5f}, 1.0f, 0.5f, {3, 5, 0});
+    new Joint(solver, pivot, bob, {0, 0, 0}, {-3, 0, 0}); // spherical (stiffnessAng defaults to 0)
+}
+
+// A 3-link spherical chain hanging vertically from a static anchor, the bottom link nudged sideways
+// so it sways gently and stays near-vertical (contact-free: link centers stay 1.0 apart, outside the
+// 0.91 broadphase reach). Spherical joints (rotation free) → a floppy chain.
+static void sceneSphericalChain(Solver *solver)
+{
+    solver->clear();
+    Rigid *prev = new Rigid(solver, {0.5f, 0.5f, 0.5f}, 0.0f, 0.5f, {0, 8, 0});
+    for (int i = 1; i <= 3; i++)
+    {
+        float3 vel = i == 3 ? float3{1.0f, 0, 0} : float3{0, 0, 0};
+        Rigid *curr = new Rigid(solver, {0.5f, 0.5f, 0.5f}, 1.0f, 0.5f, {0, 8.0f - i, 0}, vel);
+        new Joint(solver, prev, curr, {0, -0.5f, 0}, {0, 0.5f, 0}); // spherical, vertical link
+        prev = curr;
+    }
+}
+
+// A 3-link fixed-joint chain: a horizontal rigid cantilever fixed to a static anchor. The fixed joints
+// (stiffnessLin = stiffnessAng = INFINITY) lock relative orientation, so the arm resists gravity's
+// torque and settles nearly straight — the angular-row test. Contact-free (centers 1.0 apart, stays
+// straight so no folding).
+static void sceneFixedChain(Solver *solver)
+{
+    solver->clear();
+    Rigid *prev = new Rigid(solver, {0.5f, 0.5f, 0.5f}, 0.0f, 0.5f, {0, 8, 0});
+    for (int i = 1; i <= 3; i++)
+    {
+        Rigid *curr = new Rigid(solver, {0.5f, 0.5f, 0.5f}, 1.0f, 0.5f, {(float)i, 8, 0});
+        new Joint(solver, prev, curr, {0.5f, 0, 0}, {-0.5f, 0, 0}, INFINITY, INFINITY); // fixed
+        prev = curr;
+    }
+}
+
 static void (*scenes[])(Solver *) = {
     sceneEmpty,
     sceneGround,
