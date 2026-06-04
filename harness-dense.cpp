@@ -148,6 +148,26 @@ int main(int argc, char **argv) {
         }
         fprintf(f, "],");
 
+        // Springs (authored constraints, body-index-referenced) — the oracle reconstructs them to
+        // reproduce the scene; the body indices match the creation-order `bodies` array above.
+        auto indexOf = [&](Rigid *r) -> int {
+            for (int i = 0; i < n; i++) if (bodies[i] == r) return i;
+            return -1;
+        };
+        fprintf(f, "\"springs\":[");
+        bool firstSpring = true;
+        for (Force *fc = solver.forces; fc; fc = fc->next) {
+            Spring *sp = dynamic_cast<Spring *>(fc);
+            if (!sp) continue;
+            if (!firstSpring) fprintf(f, ",");
+            firstSpring = false;
+            fprintf(f, "{\"a\":%d,\"b\":%d,", indexOf(sp->bodyA), indexOf(sp->bodyB));
+            fprintf(f, "\"rA\":[%.17g,%.17g,%.17g],", sp->rA.x, sp->rA.y, sp->rA.z);
+            fprintf(f, "\"rB\":[%.17g,%.17g,%.17g],", sp->rB.x, sp->rB.y, sp->rB.z);
+            fprintf(f, "\"stiffness\":%.17g,\"rest\":%.17g}", sp->stiffness, sp->rest);
+        }
+        fprintf(f, "],");
+
         // Frames
         fprintf(f, "\"frames\":[");
         for (int frame = 1; frame <= frames; frame++) {
